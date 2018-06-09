@@ -108,13 +108,6 @@ public void OnPluginStart()
 	cvDamage = CreateConVar("sm_bossstab_damage", "1000", "How much damage do backstabs do?", FCVAR_NOTIFY, true, 0.0);
 	cvDelay = CreateConVar("sm_bossstab_delay", "1.5", "Delay in seconds between attacks upon a successful backstab.", FCVAR_NOTIFY, true, 0.0);
 	CreateConVar("sm_bossstab_version", PLUGIN_VERSION, "Boss Backstab plugin version. No touchy", FCVAR_REPLICATED | FCVAR_NOTIFY | FCVAR_SPONLY | FCVAR_DONTRECORD);
-
-	RegAdminCmd("sm_hp", HP, ADMFLAG_ROOT);
-}
-
-public Action HP(int client, int args)
-{
-	SetEntityHealth(client, 10000);
 }
 
 public void OnMapStart()
@@ -129,7 +122,7 @@ public void OnMapStart()
 	SDKHook(client, SDKHook_PreThink, OnPreThink);
 }*/
 
-public Action TF2_CalcIsAttackCritical(int client, bool &result)
+public Action TF2_CalcIsAttackCritical(int client, int wep, char[] weaponname, bool &result)
 {
 	if (!bEnabled.BoolValue)
 		return Plugin_Continue;
@@ -137,14 +130,10 @@ public Action TF2_CalcIsAttackCritical(int client, bool &result)
 	if (!(0 < client < MaxClients))
 		return Plugin_Continue;
 
-	int wep = GetPlayerWeaponSlot(client, 2);
-	if(!IsValidEntity(wep))
+	if (!IsValidEntity(wep))
 		return Plugin_Continue;
 
-	if (wep != GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"))
-		return Plugin_Continue;
-
-	if(!HasEntProp(wep, Prop_Send, "m_bReadyToBackstab"))
+	if (!HasEntProp(wep, Prop_Send, "m_bReadyToBackstab"))
 		return Plugin_Continue;
 
 	TraceRay trace;

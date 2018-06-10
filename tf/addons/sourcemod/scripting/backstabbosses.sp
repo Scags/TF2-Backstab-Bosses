@@ -68,13 +68,6 @@ methodmap TraceRay < Handle
 			return TR_GetHitGroup(this);
 		}
 	}
-	property bool AllSolid
-	{
-		public get()
-		{
-			return this.Fraction != 0.0;
-		}
-	}
 	public void GetPlaneNormal( float normal[3] )
 	{
 		TR_GetPlaneNormal(this, normal);
@@ -83,11 +76,15 @@ methodmap TraceRay < Handle
 
 public void OnPluginStart()
 {
+	Handle conf = LoadGameConfigFile("tf2.backstabbosses");
+	if (!conf)
+		SetFailState("Failed to load tf2.backstabbosses gamedata");
+
 	// 150 L; 149 W
 	StartPrepSDKCall(SDKCall_Entity);
-	PrepSDKCall_SetVirtual(149);
+	PrepSDKCall_SetFromConf(conf, SDKConf_Virtual, "CBaseEntity::WorldSpaceCenter");
 	PrepSDKCall_SetReturnInfo(SDKType_Vector, SDKPass_ByRef);
-	if ((hWorldSpaceCenter = EndPrepSDKCall()) == null)
+	if (!(hWorldSpaceCenter = EndPrepSDKCall()))
 		SetFailState("Failed to load CBaseEntity::WorldSpaceCenter");
 
 	// 248 L; 242 W
@@ -104,9 +101,11 @@ public void OnPluginStart()
 	if ((hGetSwingRange = EndPrepSDKCall()) == null)
 		SetFailState("Failed to load CTFWeaponBaseMelee::GetSwingRange");*/
 
+	delete conf;
+
 	bEnabled = CreateConVar("sm_bossstab_enable", "1", "Enable the Boss Backstab plugin?", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	cvDamage = CreateConVar("sm_bossstab_damage", "1000", "How much damage do backstabs do?", FCVAR_NOTIFY, true, 0.0);
-	cvDelay = CreateConVar("sm_bossstab_delay", "1.5", "Delay in seconds between attacks upon a successful backstab.", FCVAR_NOTIFY, true, 0.0);
+	cvDelay = CreateConVar("sm_bossstab_delay", "1.5", "Delay in seconds between attacks upon a successful backstab. 0 to disable Razorback-esque stunning.", FCVAR_NOTIFY, true, 0.0);
 	CreateConVar("sm_bossstab_version", PLUGIN_VERSION, "Boss Backstab plugin version. No touchy", FCVAR_REPLICATED | FCVAR_NOTIFY | FCVAR_SPONLY | FCVAR_DONTRECORD);
 }
 
@@ -127,7 +126,7 @@ public Action TF2_CalcIsAttackCritical(int client, int wep, char[] weaponname, b
 	if (!bEnabled.BoolValue)
 		return Plugin_Continue;
 
-	if (!(0 < client < MaxClients))
+	if (!(0 < client <= MaxClients))
 		return Plugin_Continue;
 
 	if (!IsValidEntity(wep))
@@ -146,7 +145,7 @@ public Action TF2_CalcIsAttackCritical(int client, int wep, char[] weaponname, b
 	int ent = trace.EntityIndex;
 	delete trace;
 
-	if (ent == -1)
+	if (ent <= 0)
 		return Plugin_Continue;
 
 	if (GetEntProp(ent, Prop_Send, "m_iTeamNum") == GetClientTeam(client))
@@ -156,9 +155,7 @@ public Action TF2_CalcIsAttackCritical(int client, int wep, char[] weaponname, b
 		return Plugin_Continue;
 
 	SetEntProp(wep, Prop_Send, "m_bReadyToBackstab", 1);
-	result = true;
-	
-	return Plugin_Changed;
+	return Plugin_Continue;
 }
 
 public void OnEntityCreated(int ent, const char[] classname)
@@ -166,8 +163,7 @@ public void OnEntityCreated(int ent, const char[] classname)
 	if (!strcmp(classname, "headless_hatman", false)
 	 || !strcmp(classname, "merasmus", false)
 	 || !strcmp(classname, "eyeball_boss", false)
-//	 || !strcmp(classname, "tf_zombie", false)
-	  )
+	 || !strcmp(classname, "tf_zombie", false))
 	  	SDKHook(ent, SDKHook_Spawn, OnBossSpawn);
 }
 
@@ -187,6 +183,9 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 	if (!GetEntProp(weapon, Prop_Send, "m_bReadyToBackstab"))
 		return Plugin_Continue;
 
+	EmitSoundToAll("player/spy_shield_break.wav", attacker, _, SNDLEVEL_TRAFFIC, SND_NOFLAGS, 1.0, 100, _, _, NULL_VECTOR, true, 0.0);
+	EmitSoundToAll("player/crit_received3.wav", attacker, _, SNDLEVEL_TRAFFIC, SND_NOFLAGS, 1.0, 100, _, _, NULL_VECTOR, true, 0.0);
+
 	int vm = GetEntPropEnt(attacker, Prop_Send, "m_hViewModel");
 	if (vm > MaxClients && IsValidEntity(vm))
 	{
@@ -199,15 +198,16 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 		}
 		SetEntProp(vm, Prop_Send, "m_nSequence", anim);
 	}
-
-	EmitSoundToAll("player/spy_shield_break.wav", attacker, _, SNDLEVEL_TRAFFIC, SND_NOFLAGS, 1.0, 100, _, _, NULL_VECTOR, true, 0.0);
-	EmitSoundToAll("player/crit_received3.wav", attacker, _, SNDLEVEL_TRAFFIC, SND_NOFLAGS, 1.0, 100, _, _, NULL_VECTOR, true, 0.0);
-
-	float delay = cvDelay.FloatValue, time = GetGameTime();
-	SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", delay + time);
-	SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", delay + time);
+	float delay = cvDelay.FloatValue;
+	if (delay != 0.0)
+	{
+		float time = GetGameTime();
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", delay + time);
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", delay + time);
+	}
 	
 	damage = cvDamage.FloatValue;
+	damage /= 3.0;	// Odd...
 	return Plugin_Changed;
 }
 
@@ -230,6 +230,7 @@ bool DoSwingTrace(int client, TraceRay &trace)
 	trace = new TraceRay(vecSwingStart, vecSwingEnd, MASK_SOLID, RayType_EndPoint, Check4Bosses, client);
 	if (trace.Fraction >= 1.0)
 	{
+		delete trace;
 		trace = TraceRay.AsHullFilter(vecSwingStart, vecSwingEnd, vecSwingMins, vecSwingMaxs, MASK_SOLID, Check4Bosses, client);
 		/*if (trace.Fraction < 1.0)
 		{
@@ -256,8 +257,7 @@ public bool Check4Bosses(int ent, int mask, any data)
 	if (!strcmp(classname, "headless_hatman", false)
 	 || !strcmp(classname, "merasmus", false)
 	 || !strcmp(classname, "eyeball_boss", false)
-//	 || !strcmp(classname, "tf_zombie", false)
-	  )
+	 || !strcmp(classname, "tf_zombie", false))
 		return true;
 
 	return ent != data;

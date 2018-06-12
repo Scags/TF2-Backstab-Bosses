@@ -177,6 +177,9 @@ public Action OnBossSpawn(int ent)
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3], int damagecustom)
 {
+	if (!IsValidEntity(weapon))
+		return Plugin_Continue;
+
 	if (!HasEntProp(weapon, Prop_Send, "m_bReadyToBackstab"))
 		return Plugin_Continue;
 
@@ -187,25 +190,41 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 	EmitSoundToAll("player/crit_received3.wav", attacker, _, SNDLEVEL_TRAFFIC, SND_NOFLAGS, 1.0, 100, _, _, NULL_VECTOR, true, 0.0);
 
 	int vm = GetEntPropEnt(attacker, Prop_Send, "m_hViewModel");
-	if (vm > MaxClients && IsValidEntity(vm))
-	{
-		int anim = 15;
-		switch (GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"))
-		{
-			case 727:anim = 41;
-			case 4, 194, 665, 794, 803, 883, 892, 901, 910:anim = 10;
-			case 638:anim = 31;
-		}
-		SetEntProp(vm, Prop_Send, "m_nSequence", anim);
-	}
+	bool validvm = (vm > MaxClients && IsValidEntity(vm));
+	int idx = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+	int anim;
+	
 	float delay = cvDelay.FloatValue;
 	if (delay != 0.0)
 	{
+		if (validvm)
+		{
+			anim = 15;
+			switch (idx)
+			{
+				case 727:anim = 41;
+				case 4, 194, 665, 794, 803, 883, 892, 901, 910:anim = 10;
+				case 638:anim = 31;
+			}
+			SetEntProp(vm, Prop_Send, "m_nSequence", anim);
+		}
+
 		float time = GetGameTime();
 		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", delay + time);
 		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", delay + time);
 	}
-	
+	else if (validvm)
+	{
+		anim = 38;
+		switch (idx)
+		{
+			case 225, 356, 461, 574, 649:anim = 12;
+			case 638:anim = 28;
+			case 423:anim = 22;
+		}
+		SetEntProp(vm, Prop_Send, "m_nSequence", anim);
+	}
+
 	damage = cvDamage.FloatValue;
 	damage /= 3.0;	// Odd...
 	return Plugin_Changed;

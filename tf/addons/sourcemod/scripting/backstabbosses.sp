@@ -107,6 +107,7 @@ public void OnPluginStart()
 	cvDamage = CreateConVar("sm_bossstab_damage", "1000", "How much damage do backstabs do?", FCVAR_NOTIFY, true, 0.0);
 	cvDelay = CreateConVar("sm_bossstab_delay", "1.5", "Delay in seconds between attacks upon a successful backstab. 0 to disable Razorback-esque stunning.", FCVAR_NOTIFY, true, 0.0);
 	CreateConVar("sm_bossstab_version", PLUGIN_VERSION, "Boss Backstab plugin version. No touchy", FCVAR_REPLICATED | FCVAR_NOTIFY | FCVAR_SPONLY | FCVAR_DONTRECORD);
+	AutoExecConfig(true, "TF2BossBackstabs");
 }
 
 public void OnMapStart()

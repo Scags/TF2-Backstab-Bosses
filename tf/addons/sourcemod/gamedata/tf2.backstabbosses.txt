@@ -6,8 +6,8 @@
 		{
 			"CBaseEntity::WorldSpaceCenter"
 			{
-				"windows"	"149"
-				"linux"		"150"
+				"windows"	"152"
+				"linux"		"153"
 			}
 		}
 	}
